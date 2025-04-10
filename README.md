@@ -1545,6 +1545,63 @@ if __name__ == "__main__":
                 labeled_answer=labeled_answer,
                 mode=mode,
             )
+#------------
+
+def evaluate_predictions(output, labeled_answer, mode='gen'):
+    final_metric = {"is_valid_answer": False, "acc": 0, "em": 0, "f1": 0, 'math_equal': 0}
+    pred_answer = extract_answer(output, mode=mode)
+    if pred_answer != '':
+        final_metric["is_valid_answer"] = True
+
+    if mode == 'qa':
+        normalized_pred_answer = normalize_answer_qa(pred_answer)
+        for answer in labeled_answer:
+            normalized_ground_truth = normalize_answer_qa(answer)
+            em = int(normalized_pred_answer == normalized_ground_truth)
+            acc = int(normalized_ground_truth in normalized_pred_answer)
+
+            prediction_tokens = normalized_pred_answer.split()
+            ground_truth_tokens = normalized_ground_truth.split()
+            common = Counter(prediction_tokens) & Counter(ground_truth_tokens)
+            num_same = sum(common.values())
+            if num_same == 0:
+                continue
+            precision = 1.0 * num_same / len(prediction_tokens)
+            recall = 1.0 * num_same / len(ground_truth_tokens)
+            f1 = (2 * precision * recall) / (precision + recall)
+            for k in ["em", "acc", "f1"]:
+                final_metric[k] = max(eval(k), final_metric[k])
+
+    else:
+        normalized_pred_answer = normalize_answer(pred_answer)
+        normalized_ground_truth = normalize_answer(labeled_answer)
+
+        em = int(normalized_pred_answer == normalized_ground_truth)
+        acc = int(normalized_ground_truth in normalized_pred_answer)
+    
+        prediction_tokens = normalized_pred_answer.split()
+        ground_truth_tokens = normalized_ground_truth.split()
+        common = Counter(prediction_tokens) & Counter(ground_truth_tokens)
+        num_same = sum(common.values())
+        if num_same == 0:
+            f1 = 0
+        else:
+            precision = 1.0 * num_same / len(prediction_tokens) if len(prediction_tokens) > 0 else 0
+            recall = 1.0 * num_same / len(ground_truth_tokens) if len(ground_truth_tokens) > 0 else 0
+            if (precision + recall) == 0:
+                f1 = 0
+            else:
+                f1 = (2 * precision * recall) / (precision + recall)
+
+        final_metric["em"] = em
+        final_metric["acc"] = acc
+        final_metric["f1"] = f1
+
+        final_metric["math_equal"] = is_equiv(normalized_pred_answer, normalized_ground_truth)
+
+    # print(em, acc, f1, normalized_pred_answer, '|', normalized_ground_truth)
+    return final_metric, pred_answer
+#--------------------------------
 
             # Determine if the main method's answer is valid
             my_method_valid = (pred_answer != '' and not (mode == 'choose' and dataset_name == 'gpqa' and len(pred_answer) > 1))
